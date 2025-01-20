@@ -4,6 +4,8 @@ using OpenTelemetry;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
+using Temporalio.Api.Enums.V1;
+using Temporalio.Api.OperatorService.V1;
 using Temporalio.Client;
 using Temporalio.Extensions.DiagnosticSource;
 using Temporalio.Extensions.OpenTelemetry;
@@ -25,14 +27,14 @@ using var tracerProvider = Sdk.
     CreateTracerProviderBuilder().
     SetResourceBuilder(resourceBuilder).
     AddSource(TracingInterceptor.ClientSource.Name, TracingInterceptor.WorkflowsSource.Name, TracingInterceptor.ActivitiesSource.Name).
-    AddOtlpExporter().
+    AddConsoleExporter().
     Build();
 
 using var meterProvider = Sdk.
     CreateMeterProviderBuilder().
     SetResourceBuilder(resourceBuilder).
     AddMeter(assemblyName.Name!).
-    AddOtlpExporter().
+    AddConsoleExporter().
     Build();
 
 // Create a client to localhost on default namespace
@@ -42,18 +44,14 @@ var client = await TemporalClient.ConnectAsync(new("localhost:7233")
         builder.
             AddSimpleConsole(options => options.TimestampFormat = "[HH:mm:ss] ").
             SetMinimumLevel(LogLevel.Information)),
-    Interceptors = new[] { new TracingInterceptor() },
-    Runtime = new TemporalRuntime(new TemporalRuntimeOptions()
-    {
-        Telemetry = new TelemetryOptions()
-        {
-            Metrics = new MetricsOptions()
-            {
-                CustomMetricMeter = new CustomMetricMeter(meter),
-            },
-        },
-    }),
+    Interceptors = new[] { new CustomTracingInterceptor() },
 });
+
+_ = await client.OperatorService.AddSearchAttributesAsync(new AddSearchAttributesRequest
+{
+    Namespace = "default",
+    SearchAttributes = { { WorkflowWithCustomId.CustomId.Name, WorkflowWithCustomId.CustomId.ValueType } },
+}).ConfigureAwait(false);
 
 async Task RunWorkerAsync()
 {
@@ -71,6 +69,7 @@ async Task RunWorkerAsync()
         client,
         new TemporalWorkerOptions(taskQueue: "opentelemetry-sample-dotnet-metrics").
             AddWorkflow<MyWorkflow>().
+            AddWorkflow<WorkflowWithCustomId>().
             AddActivity(Activities.MyActivity));
     try
     {
@@ -86,7 +85,7 @@ async Task ExecuteWorkflowAsync()
 {
     Console.WriteLine("Executing workflow");
     await client.ExecuteWorkflowAsync(
-        (MyWorkflow wf) => wf.RunAsync(),
+        (WorkflowWithCustomId wf) => wf.RunAsync(),
         new(id: "opentelemetry-sample-dotnet-workflow-id", taskQueue: "opentelemetry-sample-dotnet-metrics"));
 }
 
