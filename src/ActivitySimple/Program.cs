@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using Temporalio.Api.OperatorService.V1;
 using Temporalio.Client;
 using Temporalio.Worker;
 using TemporalioSamples.ActivitySimple;
@@ -45,10 +46,38 @@ async Task RunWorkerAsync()
 
 async Task ExecuteWorkflowAsync()
 {
+    // make sure the keyword list is created
+    try
+    {
+        await client.OperatorService.AddSearchAttributesAsync(new AddSearchAttributesRequest()
+        {
+            Namespace = "default",
+            SearchAttributes = { { MySearchAttributes.PetNames.Name, MySearchAttributes.PetNames.ValueType } }
+        });
+    }
+    catch (Exception e)
+    {
+        Console.WriteLine(e);
+    }
+
     Console.WriteLine("Executing workflow");
     await client.ExecuteWorkflowAsync(
         (MyWorkflow wf) => wf.RunAsync(),
         new(id: "activity-simple-workflow-id", taskQueue: "activity-simple-sample"));
+
+    // try to get the keyword list
+    var handle = client.GetWorkflowHandle("activity-simple-workflow-id");
+    var description = await handle.DescribeAsync();
+
+    // the value is internally a List<object> instead of List<string> so it returns false
+    if (description.TypedSearchAttributes.TryGetValue(MySearchAttributes.PetNames, out var petNames))
+    {
+        Console.WriteLine($"Number of pets: {petNames.Count}");
+    }
+    else
+    {
+        throw new InvalidOperationException("Pet names were not found!");
+    }
 }
 
 switch (args.ElementAtOrDefault(0))

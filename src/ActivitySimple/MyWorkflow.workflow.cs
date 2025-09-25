@@ -9,6 +9,8 @@ public class MyWorkflow
     [WorkflowRun]
     public async Task<string> RunAsync()
     {
+        Workflow.UpsertTypedSearchAttributes(SearchAttributeUpdate.ValueSet(MySearchAttributes.PetNames, ["dog", "cat"]));
+
         // Run an async instance method activity.
         var result1 = await Workflow.ExecuteActivityAsync(
             (MyActivities act) => act.SelectFromDatabaseAsync("some-db-table"),
